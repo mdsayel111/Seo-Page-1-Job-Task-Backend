@@ -45,7 +45,7 @@ const dataCollection = database.collection("Data");
 
 async function run() {
   try {
-    app.get("/data", async (req, res) => {
+    app.get("/api/data", async (req, res) => {
       const data = await dataCollection
         .aggregate([
           {
@@ -90,7 +90,7 @@ async function run() {
       res.send(data);
     });
 
-    app.post("/file/upload/:id", upload.array("files"), async (req, res) => {
+    app.post("/api/file/upload/:id", upload.array("files"), async (req, res) => {
       const id = req.params;
       const data = await dataCollection.findOne({ _id: new ObjectId(id) });
       const attachUrls = [];
