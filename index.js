@@ -1,18 +1,34 @@
 const express = require("express");
 const cors = require("cors");
+const multer = require("multer");
+require("dotenv").config();
+
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, "./public/uploads");
+  },
+  filename: function (req, file, cb) {
+    const extention = file.mimetype.split("/")[1];
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(null, file.fieldname + "-" + uniqueSuffix + `.${extention}`);
+  },
+});
+
+const upload = multer({ storage: storage });
 
 const app = express();
 const port = 3000;
 
+app.use(express.static("./public"));
+
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: ["http://localhost:5173", "https://seo-page-1-job-task.surge.sh"],
   })
 );
 
-const { MongoClient, ServerApiVersion } = require("mongodb");
-const uri =
-  "mongodb+srv://mdsayel111:fZB1I3EFRkM1d1vc@cluster0.aovrcn7.mongodb.net/?retryWrites=true&w=majority";
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.aovrcn7.mongodb.net/?retryWrites=true&w=majority`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
@@ -71,8 +87,23 @@ async function run() {
           },
         ])
         .toArray();
-      console.log(data);
       res.send(data);
+    });
+
+    app.post("/file/upload/:id", upload.array("files"), async (req, res) => {
+      const id = req.params;
+      const data = await dataCollection.findOne({ _id: new ObjectId(id) });
+      const attachUrls = [];
+      req.files.map((file) =>
+        attachUrls.push(process.env.DOMAIN_NAME + "uploads/" + file.filename)
+      );
+      const updateDoc = {
+        $set: {
+          attachFile: [...data?.attachFile, ...attachUrls],
+        },
+      };
+      await dataCollection.updateOne({ _id: new ObjectId(id) }, updateDoc);
+      res.send({ message: "file upload successfull" });
     });
   } finally {
     // Ensures that the client will close when you finish/error
