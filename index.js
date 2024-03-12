@@ -1,11 +1,14 @@
 const express = require("express");
 const cors = require("cors");
 const multer = require("multer");
+const path = require("path");
+const { google } = require("googleapis");
+const axios = require("axios");
 require("dotenv").config();
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, "./public/uploads");
+    cb(null, path.join(process.cwd(), "/public/uploads"));
   },
   filename: function (req, file, cb) {
     const extention = file.mimetype.split("/")[1];
@@ -15,6 +18,47 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({ storage: storage });
+
+const apikeys = require("./credentials.json");
+const SCOPE = ["https://www.googleapis.com/auth/drive"];
+
+async function authorize() {
+  const jwtClient = new google.auth.JWT(
+    apikeys.client_email,
+    null,
+    apikeys.private_key,
+    SCOPE
+  );
+  await jwtClient.authorize();
+  return jwtClient;
+}
+
+async function uploadFile(authClient, files) {
+  return new Promise((resolve, rejected) => {
+    const drive = google.drive({ version: "v3", auth: authClient });
+    var fileMetaData = {
+      name: "mydrivetext.jpg",
+      parents: ["1vd6Cy41XQARX_Xt7BVKgc5AHTK7nafBw"],
+    };
+
+    drive.files.create(
+      {
+        resource: fileMetaData,
+        media: {
+          body: files,
+          mimeType: "image/jpg",
+        },
+        fields: 'id,webViewLink',
+      },
+      function (error, file) {
+        if (error) {
+          return rejected(error);
+        }
+        resolve(file);
+      }
+    );
+  });
+}
 
 const app = express();
 const port = 3000;
@@ -90,21 +134,30 @@ async function run() {
       res.send(data);
     });
 
-    app.post("/api/file/upload/:id", upload.array("files"), async (req, res) => {
-      const id = req.params;
-      const data = await dataCollection.findOne({ _id: new ObjectId(id) });
-      const attachUrls = [];
-      req.files.map((file) =>
-        attachUrls.push(process.env.DOMAIN_NAME + "uploads/" + file.filename)
-      );
-      const updateDoc = {
-        $set: {
-          attachFile: [...data?.attachFile, ...attachUrls],
-        },
-      };
-      await dataCollection.updateOne({ _id: new ObjectId(id) }, updateDoc);
-      res.send({ message: "file upload successfull" });
-    });
+    app.post(
+      "/api/file/upload/:id",
+      upload.array("files"),
+      async (req, res) => {
+        const id = req.params;
+        const files = req.files.buffer;
+        const authClient = await authorize();
+        const filesFromGGD = await uploadFile(authClient, files);
+        console.log(filesFromGGD);
+
+        // const data = await dataCollection.findOne({ _id: new ObjectId(id) });
+        // const attachUrls = [];
+        // req.files.map((file) =>
+        //   attachUrls.push(process.env.DOMAIN_NAME + "uploads/" + file.filename)
+        // );
+        // const updateDoc = {
+        //   $set: {
+        //     attachFile: [...data?.attachFile, ...attachUrls],
+        //   },
+        // };
+        // await dataCollection.updateOne({ _id: new ObjectId(id) }, updateDoc);
+        // res.send({ message: "file upload successfull" });
+      }
+    );
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
